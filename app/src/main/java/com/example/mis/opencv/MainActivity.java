@@ -13,6 +13,7 @@ import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
+import org.opencv.core.MatOfRect;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -28,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 
 public class MainActivity extends Activity implements CvCameraViewListener2 {
     private static final String TAG = "OCVSample::Activity";
@@ -38,6 +40,9 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
 
     private CascadeClassifier mEyeCascade;
     private CascadeClassifier mFrontalFaceCascade;
+
+    private int mAbsoluteFaceSize = 0;
+    private float mRelativeFaceSize = 0.2f;
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -74,10 +79,6 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
 
         mOpenCvCameraView.setCvCameraViewListener(this);
-
-        mEyeCascade = new CascadeClassifier(initAssetFile("haarcascade_eye.xml"));
-        mFrontalFaceCascade = new CascadeClassifier(initAssetFile("haarcascade_frontalface_default.xml"));
-
     }
 
     @Override
@@ -108,6 +109,8 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     }
 
     public void onCameraViewStarted(int width, int height) {
+        mEyeCascade = new CascadeClassifier(initAssetFile("haarcascade_eye.xml"));
+        mFrontalFaceCascade = new CascadeClassifier(initAssetFile("haarcascade_frontalface_default.xml"));
     }
 
     public void onCameraViewStopped() {
@@ -123,12 +126,47 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
         return col;
         */
 
+        /*
+        Src: https://github.com/opencv/opencv/blob/master/samples/android/face-detection/src/org/opencv/samples/facedetect/FdActivity.java
+         */
+
         Mat gray = inputFrame.gray();
         Mat col  = inputFrame.rgba();
 
         Mat tmp = gray.clone();
-        Imgproc.Canny(gray, tmp, 80, 100);
-        Imgproc.cvtColor(tmp, col, Imgproc.COLOR_GRAY2RGBA, 4);
+
+        MatOfRect faces = new MatOfRect();
+
+        if (mFrontalFaceCascade != null) {
+            mFrontalFaceCascade.detectMultiScale(gray, faces);
+        } else {
+            Log.e(TAG, "No FrontalFaceCascade loaded!");
+            //return col;
+        }
+
+        Rect[] facesArray = faces.toArray();
+        for (int i = 0; i < facesArray.length; i++) {
+            Mat face_gray = tmp.submat(facesArray[i]);
+            Mat face_col = col.submat(facesArray[i]);
+
+            MatOfRect eyes = new MatOfRect();
+
+            if(mEyeCascade != null) {
+                mEyeCascade.detectMultiScale(face_gray, eyes);
+            } else {
+                Log.e(TAG, "No EyeCascade loaded!");
+                //return col;
+            }
+            Rect[] eyeArray = eyes.toArray();
+
+            Log.i("Faces Detected: ", Integer.toString(facesArray.length));
+            Log.i("Eyes Detected: ", Integer.toString(eyeArray.length));
+
+            Point nose = new Point(facesArray[i].x + facesArray[i].width * 0.5, facesArray[i].y + facesArray[i].height * 0.6);
+
+            //Imgproc.rectangle(col, facesArray[i].tl(), facesArray[i].br(), new Scalar(255, 0, 0), 2);
+            Imgproc.circle(col, nose, (int) Math.ceil(facesArray[i].width * 0.1), new Scalar(255, 0, 0), -1);
+        }
 
         return col;
     }
